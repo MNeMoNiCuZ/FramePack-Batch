@@ -1,0 +1,2 @@
+# Additional requirements for batch.py (beyond what's in requirements.txt)
+tqdm>=4.66.0 
