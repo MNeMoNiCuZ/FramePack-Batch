@@ -13,7 +13,7 @@ FramePack Batch Processor is a command-line tool that processes a folder of imag
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.10
 - PyTorch with CUDA support
 - Hugging Face Transformers
 - Diffusers
@@ -21,12 +21,14 @@ FramePack Batch Processor is a command-line tool that processes a folder of imag
 
 ## Installation
 
-1. Clone or download this repository
-2. Run `venv_create.bat` to set up your environment:
+1. Clone or download the original repository
+2. Clone or download the scripts and files from this repository into the same directory
+3. Run `venv_create.bat` to set up your environment:
    - Choose your Python version when prompted
    - Accept the default virtual environment name (venv) or choose your own
    - Allow pip upgrade when prompted
    - Allow installation of dependencies from requirements.txt
+4. Install the new requirements by running `pip install -r requirements-batch.txt` in your virtual environment
 
 The script will create:
 - A virtual environment
