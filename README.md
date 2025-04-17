@@ -1,6 +1,16 @@
 # FramePack Batch Processor
 
-FramePack Batch Processor is a command-line tool that processes a folder of images and transforms them into animated videos using the FramePack I2V model. This tool enables you to batch process multiple images without needing to use the Gradio web interface.
+FramePack Batch Processor is a command-line tool that processes a folder of images and transforms them into animated videos using the FramePack I2V model. This tool enables you to batch process multiple images without needing to use the Gradio web interface, and it also allows you to extract and use the prompt used in your original image, if it's saved in the EXIF metadata (like A1111 or other tools does).
+
+### Original Repository
+[https://github.com/lllyasviel/FramePack](https://github.com/lllyasviel/FramePack)
+
+### Sample Image to Video
+![2024-11-29 - 12 31 35](https://github.com/user-attachments/assets/8a2fe5eb-a0d9-4947-b0b5-89960fd92738)
+
+https://github.com/user-attachments/assets/3cadc2a8-4285-414e-947f-bb6cfb77b532
+
+_Sample image and video, will add a stronger example later._
 
 ## Features
 
@@ -10,6 +20,7 @@ FramePack Batch Processor is a command-line tool that processes a folder of imag
 - Extract prompts from image metadata (optional)
 - Works in both high and low VRAM environments
 - Skip files that already have generated videos
+- Final videos will be copied to the input folder, matching the same name as the input image
 
 ## Requirements
 
@@ -21,7 +32,7 @@ FramePack Batch Processor is a command-line tool that processes a folder of imag
 
 ## Installation
 
-1. Clone or download the original repository
+1. Clone or download the [original repository](https://github.com/lllyasviel/FramePack)
 2. Clone or download the scripts and files from this repository into the same directory
 3. Run `venv_create.bat` to set up your environment:
    - Choose your Python version when prompted
