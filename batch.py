@@ -32,7 +32,7 @@ DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'o
 DEFAULT_PROMPT = ""
 DEFAULT_USE_IMAGE_PROMPT = True     # Whether to extract prompts from image metadata (DEFAULT_PROMPT entry take priority)
 DEFAULT_SEED = -1                    # -1 = random
-DEFAULT_USE_TEACACHE = True          # TeaCache: faster but may affect hand quality
+DEFAULT_USE_TEACACHE = False          # TeaCache: faster but may affect hand quality
 DEFAULT_VIDEO_LENGTH = 5.0           # Video length in seconds (range: 1-120)
 DEFAULT_STEPS = 25                   # Number of sampling steps
 DEFAULT_DISTILLED_CFG = 10.0         # Distilled CFG scale
