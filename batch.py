@@ -508,8 +508,7 @@ def main():
                 print(f"Using empty prompt (no metadata prompt found and no command-line prompt provided)")
                 # Default fallback prompt for completely empty cases - just provides natural motion
                 if actual_prompt == "":
-                    actual_prompt = "The character moves naturally with subtle gestures and expressions."
-                    print(f"Using fallback prompt to ensure natural motion: '{actual_prompt}'")
+                    print(f"Using empty prompt")
                 
         # Process the image
         process_single_image(
