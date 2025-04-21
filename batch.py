@@ -34,8 +34,8 @@ from diffusers_helper.bucket_tools import find_nearest_bucket
 # 4. fallback_prompt. The same will be used for each generation
 
 prompt_list_file   = 'prompt_list.txt'  # File with one prompt per line for batch processing
-use_prompt_list    = False              # Enable to use prompt_list_file for prompts
-use_image_prompt   = True              # Use image metadata as prompt if available
+use_prompt_list_file = False            # Enable to use prompt_list_file for prompts
+use_image_prompt   = True               # Use image metadata as prompt if available
 fallback_prompt    = ""                 # Fallback prompt if no other prompt source is found
 
 # Other settings
@@ -173,8 +173,8 @@ def parse_args():
                         help=f"Whether to overwrite existing output files (default: {overwrite})")
     parser.add_argument("--fix_encoding", action="store_true", default=fix_encoding,
                         help=f"Fix video encoding for web compatibility (default: {fix_encoding})")
-    parser.add_argument("--use_prompt_list", action="store_true", default=use_prompt_list,
-                        help=f"Use prompt list file (default: {use_prompt_list})")
+    parser.add_argument("--use_prompt_list_file", action="store_true", default=use_prompt_list_file,
+                        help=f"Use prompt list file (default: {use_prompt_list_file})")
     parser.add_argument("--prompt_list_file", type=str, default=prompt_list_file,
                         help=f"Path to prompt list file (default: '{prompt_list_file}')")
     parser.add_argument("--copy_to_input", action="store_true", default=copy_to_input,
@@ -500,7 +500,7 @@ def main():
     per_image_txt_exists = all(os.path.exists(str(img.with_suffix('.txt'))) for img in image_files)
     if per_image_txt_exists and len(image_files) > 0:
         prompt_desc = "(Using per-image .txt files)"
-    elif args.use_prompt_list and os.path.exists(args.prompt_list_file):
+    elif args.use_prompt_list_file and os.path.exists(args.prompt_list_file):
         prompt_desc = f"(Using prompt list: {args.prompt_list_file})"
     elif args.use_image_prompt:
         prompt_desc = "(Using image metadata)"
@@ -586,7 +586,7 @@ def main():
     # Priority 1: Prompt list (prompt_list.txt, if use_prompt_list and prompt_list_file exists)
     prompt_list = None
     prompt_list_path = None
-    if args.use_prompt_list and os.path.exists(args.prompt_list_file):
+    if args.use_prompt_list_file and os.path.exists(args.prompt_list_file):
         prompt_list_path = args.prompt_list_file
     if prompt_list_path is not None:
         with open(prompt_list_path, 'r', encoding='utf-8') as f:
