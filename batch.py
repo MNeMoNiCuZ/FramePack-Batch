@@ -8,6 +8,7 @@ from pathlib import Path
 import random
 from tqdm import tqdm
 from PIL import Image
+import subprocess
 
 # Set environment variable for HuggingFace models cache
 os.environ['HF_HOME'] = os.path.abspath(os.path.realpath(os.path.join(os.path.dirname(__file__), './hf_download')))
@@ -32,12 +33,14 @@ DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'o
 DEFAULT_PROMPT = ""
 DEFAULT_USE_IMAGE_PROMPT = True     # Whether to extract prompts from image metadata (DEFAULT_PROMPT entry take priority)
 DEFAULT_SEED = -1                    # -1 = random
-DEFAULT_USE_TEACACHE = False          # TeaCache: faster but may affect hand quality
+DEFAULT_USE_TEACACHE = True          # TeaCache: faster but may affect hand quality
 DEFAULT_VIDEO_LENGTH = 5.0           # Video length in seconds (range: 1-120)
 DEFAULT_STEPS = 25                   # Number of sampling steps
 DEFAULT_DISTILLED_CFG = 10.0         # Distilled CFG scale
 DEFAULT_GPU_MEMORY = 6.0             # GPU inference memory preservation (GB)
 DEFAULT_OVERWRITE = False            # Whether to overwrite existing output files
+DEFAULT_FIX_ENCODING = True          # Whether to fix video encoding for web compatibility
+DEFAULT_COPY_TO_INPUT = True         # Whether to copy final video to input folder
 
 def get_image_files(directory):
     """Get all image files from directory"""
@@ -99,6 +102,40 @@ def get_image_prompt(image_path):
         print(f"Warning: Error extracting metadata from {image_path}: {e}")
         return None
 
+def fix_video_encoding(input_path):
+    """Re-encode video to ensure web compatibility with minimal quality loss using FFmpeg"""
+    try:
+        input_path = Path(input_path)
+        output_path = input_path.with_stem(input_path.stem + "_fixed")
+        
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-i", str(input_path),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "17",  # Lower CRF for high quality
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            "-pix_fmt", "yuv420p",
+            "-y",
+            str(output_path)
+        ]
+        
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True, text=True)
+        print(f"Successfully fixed encoding: {input_path} -> {output_path}")
+        return output_path
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Error fixing encoding for {input_path}: {e.stderr}")
+        return None
+    except FileNotFoundError:
+        print("Error: FFmpeg is not installed or not found in PATH. Please install FFmpeg.")
+        return None
+    except Exception as e:
+        print(f"Unexpected error fixing encoding for {input_path}: {str(e)}")
+        return None
+
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Batch process images to videos")
@@ -125,6 +162,10 @@ def parse_args():
                         help=f"Use prompt from image metadata if available (default: {DEFAULT_USE_IMAGE_PROMPT})")
     parser.add_argument("--overwrite", action="store_true", default=DEFAULT_OVERWRITE,
                         help=f"Whether to overwrite existing output files (default: {DEFAULT_OVERWRITE})")
+    parser.add_argument("--fix_encoding", action="store_true", default=DEFAULT_FIX_ENCODING,
+                        help=f"Fix video encoding for web compatibility (default: {DEFAULT_FIX_ENCODING})")
+    parser.add_argument("--copy_to_input", action="store_true", default=DEFAULT_COPY_TO_INPUT,
+                        help=f"Copy final video to input folder (default: {DEFAULT_COPY_TO_INPUT})")
     
     return parser.parse_args()
 
@@ -133,7 +174,8 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
                          video_length=5.0, steps=25, gs=10.0, gpu_memory=6.0, 
                          use_teacache=True, high_vram=False, 
                          text_encoder=None, text_encoder_2=None, tokenizer=None, tokenizer_2=None,
-                         vae=None, feature_extractor=None, image_encoder=None, transformer=None):
+                         vae=None, feature_extractor=None, image_encoder=None, transformer=None,
+                         fix_encoding=True, copy_to_input=True):
     """Process a single image to generate a video"""
     
     job_id = generate_timestamp()
@@ -326,27 +368,56 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
         # Copy the last temp file to the final output filename
         shutil.copy2(temp_output_filename, final_output_filename)
         
-        # Also copy to the input folder, with error handling for permission denied
+        # Handle encoding fix and copying to input folder
         input_dir = str(Path(image_path).parent)
         input_output_filename = os.path.join(input_dir, f'{filename}.mp4')
-        try:
-            # Check if file exists and is locked (likely being written to or read from)
-            if os.path.exists(input_output_filename):
-                # Try to open the file to check if it's accessible
-                try:
-                    with open(input_output_filename, 'a'):
-                        pass
-                except:
-                    print(f"Warning: Output file {input_output_filename} is locked or in use. Skipping copy to input folder.")
-                    return final_output_filename
+        
+        if copy_to_input:
+            try:
+                # Check if file exists and is locked
+                if os.path.exists(input_output_filename):
+                    try:
+                        with open(input_output_filename, 'a'):
+                            pass
+                    except:
+                        print(f"Warning: Output file {input_output_filename} is locked or in use. Skipping copy to input folder.")
+                        return final_output_filename
+                
+                # Fix encoding if enabled
+                if fix_encoding:
+                    fixed_output = fix_video_encoding(final_output_filename)
+                    if fixed_output:
+                        # Use the fixed video for copying
+                        shutil.copy2(fixed_output, input_output_filename)
+                        print(f"✅ Successfully processed and fixed {image_path} -> {input_output_filename}")
+                        # Remove the fixed temporary file
+                        os.remove(fixed_output)
+                    else:
+                        print(f"Warning: Encoding fix failed. Copying original video to {input_output_filename}")
+                        shutil.copy2(final_output_filename, input_output_filename)
+                        print(f"✅ Successfully processed {image_path} -> {input_output_filename}")
+                else:
+                    shutil.copy2(final_output_filename, input_output_filename)
+                    print(f"✅ Successfully processed {image_path} -> {input_output_filename}")
                     
-            shutil.copy2(temp_output_filename, input_output_filename)
-            print(f"✅ Successfully processed {image_path} -> {input_output_filename}")
-        except PermissionError:
-            print(f"Warning: Could not copy to {input_output_filename} due to permission error. Output is still available at {final_output_filename}")
-        except Exception as e:
-            print(f"Warning: Could not copy to input folder: {e}. Output is still available at {final_output_filename}")
+            except PermissionError:
+                print(f"Warning: Could not copy to {input_output_filename} due to permission error. Output is still available at {final_output_filename}")
+            except Exception as e:
+                print(f"Warning: Could not copy to input folder: {e}. Output is still available at {final_output_filename}")
             
+        else:
+            if fix_encoding:
+                fixed_output = fix_video_encoding(final_output_filename)
+                if fixed_output:
+                    # Replace the original output with the fixed version
+                    shutil.move(fixed_output, final_output_filename)
+                    print(f"✅ Successfully processed and fixed {image_path} -> {final_output_filename}")
+                else:
+                    print(f"Warning: Encoding fix failed. Keeping original video at {final_output_filename}")
+                    print(f"✅ Successfully processed {image_path} -> {final_output_filename}")
+            else:
+                print(f"✅ Successfully processed {image_path} -> {final_output_filename}")
+                
         return final_output_filename
         
     except Exception as e:
@@ -419,6 +490,8 @@ def main():
     print(f"  TeaCache: {args.use_teacache}")
     print(f"  GPU Memory: {args.gpu_memory} GB")
     print(f"  Overwrite Existing: {args.overwrite}")
+    print(f"  Fix Encoding: {args.fix_encoding}")
+    print(f"  Copy to Input: {args.copy_to_input}")
     print(f"\nProcessing {len(image_files)} images...")
     
     # Check VRAM and set high_vram mode
@@ -530,10 +603,12 @@ def main():
             vae=vae,
             feature_extractor=feature_extractor,
             image_encoder=image_encoder,
-            transformer=transformer
+            transformer=transformer,
+            fix_encoding=args.fix_encoding,
+            copy_to_input=args.copy_to_input
         )
 
     print("\nAll images processed!")
 
 if __name__ == "__main__":
-    main() 
+    main()
