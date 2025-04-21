@@ -27,20 +27,29 @@ from transformers import SiglipImageProcessor, SiglipVisionModel
 from diffusers_helper.clip_vision import hf_clip_vision_encode
 from diffusers_helper.bucket_tools import find_nearest_bucket
 
-# Default settings
-DEFAULT_INPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'input')
-DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
-DEFAULT_PROMPT = ""
-DEFAULT_USE_IMAGE_PROMPT = True     # Whether to extract prompts from image metadata (DEFAULT_PROMPT entry take priority)
-DEFAULT_SEED = -1                    # -1 = random
-DEFAULT_USE_TEACACHE = True          # TeaCache: faster but may affect hand quality
-DEFAULT_VIDEO_LENGTH = 5.0           # Video length in seconds (range: 1-120)
-DEFAULT_STEPS = 25                   # Number of sampling steps
-DEFAULT_DISTILLED_CFG = 10.0         # Distilled CFG scale
-DEFAULT_GPU_MEMORY = 6.0             # GPU inference memory preservation (GB)
-DEFAULT_OVERWRITE = False            # Whether to overwrite existing output files
-DEFAULT_FIX_ENCODING = True          # Whether to fix video encoding for web compatibility
-DEFAULT_COPY_TO_INPUT = True         # Whether to copy final video to input folder
+# Prompt selection order:
+# 1. prompt_list.txt (if use_prompt_list is True). One prompt per line in this .txt-file
+# 2. Per-image .txt file (if exists). The .txt-file should share name with the image-file.
+# 3. Image metadata (if use_image_prompt is True)
+# 4. fallback_prompt. The same will be used for each generation
+
+prompt_list_file   = 'prompt_list.txt'  # File with one prompt per line for batch processing
+use_prompt_list    = False              # Enable to use prompt_list_file for prompts
+use_image_prompt   = True              # Use image metadata as prompt if available
+fallback_prompt    = ""                 # Fallback prompt if no other prompt source is found
+
+# Other settings
+input_dir          = 'input'            # Directory containing input images
+output_dir         = 'outputs'          # Directory to save output videos
+seed               = -1                 # Random seed; -1 means random each run
+use_teacache       = True               # Use TeaCache for faster processing (may affect hand quality)
+video_length       = 10                 # Video length in seconds (range: 1-120)
+steps              = 25                 # Number of sampling steps per video
+distilled_cfg      = 10.0               # Distilled CFG scale for model guidance
+gpu_memory         = 6.0                # GPU memory to preserve (GB)
+overwrite          = False              # Overwrite existing output files if True
+fix_encoding       = True               # Re-encode video for web compatibility
+copy_to_input      = True               # Copy final video to input folder
 
 def get_image_files(directory):
     """Get all image files from directory"""
@@ -138,34 +147,38 @@ def fix_video_encoding(input_path):
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Batch process images to videos")
+    parser = argparse.ArgumentParser(description="Batch process images to generate videos")
     
-    parser.add_argument("--input_dir", type=str, default=DEFAULT_INPUT_DIR, 
-                        help=f"Directory containing input images (default: {DEFAULT_INPUT_DIR})")
-    parser.add_argument("--output_dir", type=str, default=DEFAULT_OUTPUT_DIR, 
-                        help=f"Directory to save output videos (default: {DEFAULT_OUTPUT_DIR})")
-    parser.add_argument("--prompt", type=str, default=DEFAULT_PROMPT,
-                        help=f"Prompt to guide the generation (default: '{DEFAULT_PROMPT}')")
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED,
-                        help=f"Random seed, -1 for random (default: {DEFAULT_SEED})")
-    parser.add_argument("--use_teacache", action="store_true", default=DEFAULT_USE_TEACACHE,
-                        help=f"Use TeaCache - faster but may affect hand quality (default: {DEFAULT_USE_TEACACHE})")
-    parser.add_argument("--video_length", type=float, default=DEFAULT_VIDEO_LENGTH,
-                        help=f"Total video length in seconds, range 1-120 (default: {DEFAULT_VIDEO_LENGTH})")
-    parser.add_argument("--steps", type=int, default=DEFAULT_STEPS,
-                        help=f"Number of sampling steps, range 1-100 (default: {DEFAULT_STEPS})")
-    parser.add_argument("--distilled_cfg", type=float, default=DEFAULT_DISTILLED_CFG,
-                        help=f"Distilled CFG scale, range 1.0-32.0 (default: {DEFAULT_DISTILLED_CFG})")
-    parser.add_argument("--gpu_memory", type=float, default=DEFAULT_GPU_MEMORY,
-                        help=f"GPU memory preservation in GB, range 6-128 (default: {DEFAULT_GPU_MEMORY})")
-    parser.add_argument("--use_image_prompt", action="store_true", default=DEFAULT_USE_IMAGE_PROMPT,
-                        help=f"Use prompt from image metadata if available (default: {DEFAULT_USE_IMAGE_PROMPT})")
-    parser.add_argument("--overwrite", action="store_true", default=DEFAULT_OVERWRITE,
-                        help=f"Whether to overwrite existing output files (default: {DEFAULT_OVERWRITE})")
-    parser.add_argument("--fix_encoding", action="store_true", default=DEFAULT_FIX_ENCODING,
-                        help=f"Fix video encoding for web compatibility (default: {DEFAULT_FIX_ENCODING})")
-    parser.add_argument("--copy_to_input", action="store_true", default=DEFAULT_COPY_TO_INPUT,
-                        help=f"Copy final video to input folder (default: {DEFAULT_COPY_TO_INPUT})")
+    parser.add_argument("--input_dir", type=str, default=input_dir, 
+                        help=f"Directory containing input images (default: {input_dir})")
+    parser.add_argument("--output_dir", type=str, default=output_dir, 
+                        help=f"Directory to save output videos (default: {output_dir})")
+    parser.add_argument("--prompt", type=str, default=fallback_prompt,
+                        help=f"Prompt to guide the generation (fallback: '{fallback_prompt}')")
+    parser.add_argument("--seed", type=int, default=seed,
+                        help=f"Random seed, -1 for random (default: {seed})")
+    parser.add_argument("--use_teacache", action="store_true", default=use_teacache,
+                        help=f"Use TeaCache - faster but may affect hand quality (default: {use_teacache})")
+    parser.add_argument("--video_length", type=float, default=video_length,
+                        help=f"Total video length in seconds, range 1-120 (default: {video_length})")
+    parser.add_argument("--steps", type=int, default=steps,
+                        help=f"Number of sampling steps, range 1-100 (default: {steps})")
+    parser.add_argument("--distilled_cfg", type=float, default=distilled_cfg,
+                        help=f"Distilled CFG scale, range 1.0-32.0 (default: {distilled_cfg})")
+    parser.add_argument("--gpu_memory", type=float, default=gpu_memory,
+                        help=f"GPU memory preservation in GB, range 6-128 (default: {gpu_memory})")
+    parser.add_argument("--use_image_prompt", action="store_true", default=use_image_prompt,
+                        help="Use image metadata for prompt if available")
+    parser.add_argument("--overwrite", action="store_true", default=overwrite,
+                        help=f"Whether to overwrite existing output files (default: {overwrite})")
+    parser.add_argument("--fix_encoding", action="store_true", default=fix_encoding,
+                        help=f"Fix video encoding for web compatibility (default: {fix_encoding})")
+    parser.add_argument("--use_prompt_list", action="store_true", default=use_prompt_list,
+                        help=f"Use prompt list file (default: {use_prompt_list})")
+    parser.add_argument("--prompt_list_file", type=str, default=prompt_list_file,
+                        help=f"Path to prompt list file (default: '{prompt_list_file}')")
+    parser.add_argument("--copy_to_input", action="store_true", default=copy_to_input,
+                        help=f"Copy final video to input folder (default: {copy_to_input})")
     
     return parser.parse_args()
 
@@ -482,7 +495,20 @@ def main():
     print("\nBatch Processing Settings:")
     print(f"  Input Directory: {args.input_dir}")
     print(f"  Output Directory: {args.output_dir}")
-    print(f"  Prompt: {args.prompt if args.prompt else '(Using image metadata)' if args.use_image_prompt else '(Empty)'}")
+    # Determine prompt source for settings printout (accurate to per-image .txt, prompt list, image metadata, or fallback)
+    prompt_desc = None
+    per_image_txt_exists = all(os.path.exists(str(img.with_suffix('.txt'))) for img in image_files)
+    if per_image_txt_exists and len(image_files) > 0:
+        prompt_desc = "(Using per-image .txt files)"
+    elif args.use_prompt_list and os.path.exists(args.prompt_list_file):
+        prompt_desc = f"(Using prompt list: {args.prompt_list_file})"
+    elif args.use_image_prompt:
+        prompt_desc = "(Using image metadata)"
+    elif args.prompt:
+        prompt_desc = args.prompt
+    else:
+        prompt_desc = f"(Fallback: '{fallback_prompt}')"
+    print(f"  Prompt: {prompt_desc}")
     print(f"  Video Length: {args.video_length} seconds")
     print(f"  Steps: {args.steps}")
     print(f"  Seed: {args.seed if args.seed != -1 else 'Random'}")
@@ -492,6 +518,7 @@ def main():
     print(f"  Overwrite Existing: {args.overwrite}")
     print(f"  Fix Encoding: {args.fix_encoding}")
     print(f"  Copy to Input: {args.copy_to_input}")
+
     print(f"\nProcessing {len(image_files)} images...")
     
     # Check VRAM and set high_vram mode
@@ -556,33 +583,57 @@ def main():
         vae.to(gpu)
         transformer.to(gpu)
 
+    # Priority 1: Prompt list (prompt_list.txt, if use_prompt_list and prompt_list_file exists)
+    prompt_list = None
+    prompt_list_path = None
+    if args.use_prompt_list and os.path.exists(args.prompt_list_file):
+        prompt_list_path = args.prompt_list_file
+    if prompt_list_path is not None:
+        with open(prompt_list_path, 'r', encoding='utf-8') as f:
+            prompt_list = [line.strip() for line in f if line.strip()]
+        print(f"Loaded {len(prompt_list)} prompts from prompts.txt (project root)")
+
     # Process each image
     for i, image_path in enumerate(image_files):
         print(f"\n[{i+1}/{len(image_files)}] Processing {image_path}")
-        
-        # Get prompt from image metadata if enabled
-        image_prompt = None
-        if args.use_image_prompt:
-            image_prompt = get_image_prompt(image_path)
-            if image_prompt:
-                print(f"Found prompt in image metadata: {image_prompt[:100]}..." if len(image_prompt) > 100 else image_prompt)
+        actual_prompt = None
+        prompt_source = None
+
+        # Priority 1: Project-wide prompts.txt
+        if prompt_list is not None:
+            if i < len(prompt_list):
+                actual_prompt = prompt_list[i]
+                prompt_source = f"project prompts.txt line {i+1}"
             else:
-                print(f"No prompt found in image metadata.")
-        
-        # Use image metadata prompt if available and enabled, otherwise use CLI prompt
-        actual_prompt = args.prompt
-        if args.use_image_prompt and image_prompt and args.prompt == DEFAULT_PROMPT:
-            actual_prompt = image_prompt
-            print(f"Using prompt from image metadata")
+                actual_prompt = ""
+                prompt_source = "project prompts.txt (no line, using empty prompt)"
         else:
-            if args.prompt:
-                print(f"Using command-line prompt: {args.prompt}")
-            else:
-                print(f"Using empty prompt (no metadata prompt found and no command-line prompt provided)")
-                # Default fallback prompt for completely empty cases - just provides natural motion
-                if actual_prompt == "":
-                    print(f"Using empty prompt")
-                
+            # Priority 2: Per-image .txt file
+            image_txt_path = image_path.with_suffix('.txt')
+            if image_txt_path.exists():
+                with open(image_txt_path, 'r', encoding='utf-8') as f:
+                    actual_prompt = f.read().strip()
+                prompt_source = f"per-image .txt ({image_txt_path.name})"
+            # Priority 3: Image metadata
+            if actual_prompt is None and args.use_image_prompt:
+                image_prompt = get_image_prompt(image_path)
+                if image_prompt:
+                    actual_prompt = image_prompt
+                    prompt_source = "image metadata"
+            # Priority 4: Fallback prompt
+            if actual_prompt is None:
+                actual_prompt = fallback_prompt
+                if fallback_prompt:
+                    prompt_source = "fallback prompt"
+                else:
+                    prompt_source = "empty prompt"
+
+        print(f"Using prompt from: {prompt_source}")
+        if actual_prompt:
+            print(f"Prompt: {actual_prompt[:100]}{'...' if len(actual_prompt) > 100 else ''}")
+        else:
+            print("Prompt: (empty)")
+
         # Process the image
         process_single_image(
             image_path=image_path,
