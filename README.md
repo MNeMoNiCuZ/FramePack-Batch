@@ -26,6 +26,7 @@ _Sample image and video, will add a stronger example later._
 
 - Python 3.10
 - PyTorch with CUDA support
+   - Tested with Cuda 12.4 and torch 2.6.0+cu126
 - Hugging Face Transformers
 - Diffusers
 - VRAM: 6GB minimum (works better with 12GB+)
