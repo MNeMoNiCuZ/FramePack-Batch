@@ -40,10 +40,10 @@ fallback_prompt    = ""                 # Fallback prompt if no other prompt sou
 
 # Other settings
 input_dir          = 'input'            # Directory containing input images
-output_dir         = 'outputs'          # Directory to save output videos
+output_dir         = 'output'           # Directory to save output videos
 seed               = -1                 # Random seed; -1 means random each run
 use_teacache       = True               # Use TeaCache for faster processing (may affect hand quality)
-video_length       = 10                 # Video length in seconds (range: 1-120)
+video_length       = 5                  # Video length in seconds (range: 1-120)
 steps              = 25                 # Number of sampling steps per video
 distilled_cfg      = 10.0               # Distilled CFG scale for model guidance
 gpu_memory         = 6.0                # GPU memory to preserve (GB)
