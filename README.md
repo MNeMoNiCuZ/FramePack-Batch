@@ -2,15 +2,16 @@
 
 FramePack Batch Processor is a command-line tool that processes a folder of images and transforms them into animated videos using the FramePack I2V model. This tool enables you to batch process multiple images without needing to use the Gradio web interface, and it also allows you to extract and use the prompt used in your original image, if it's saved in the EXIF metadata (like A1111 or other tools does).
 
-### Original Repository
+## Original Repository
 [https://github.com/lllyasviel/FramePack](https://github.com/lllyasviel/FramePack)
 
-### Sample Image to Video
-![2024-11-29 - 12 31 35](https://github.com/user-attachments/assets/8a2fe5eb-a0d9-4947-b0b5-89960fd92738)
+## Sample Image to Video
+![2024-03-09 - 04 49 49](https://github.com/user-attachments/assets/f95b258f-6a3d-42e0-bf89-63c9f22739f6)
 
-https://github.com/user-attachments/assets/3cadc2a8-4285-414e-947f-bb6cfb77b532
+https://github.com/user-attachments/assets/80d6b94a-bafd-42a6-b05b-4e1488c0b890
 
-_Sample image and video, will add a stronger example later._
+Prompt:
+> Ethereal manifestation of death, solo, full-body portrait, hooded reaper, ominous and mysterious, dynamic pose with a flowing, tattered cloak billowing in an unseen wind, clutching a menacing scythe that glints under eerie, low lighting. Gaunt, ghostly face partially visible beneath the hood, piercing eyes locked on the viewer. Steampunk-gothic aesthetic: decayed leather straps, tarnished brass buckles, faintly glowing arcane runes pulsing on the scythe’s handle in sickly green or violet. Semi-translucent form with wisps of dark, smoky energy trailing from cloak and scythe, dissolving like ash. Dust and debris swirl in slow, hypnotic spirals, embodying decay. Desolate quarry at twilight, fog-shrouded, with jagged rocks, crumbling stone structures, rusted mining equipment, broken scaffolds, and moss-covered ruins. Swirling mist creeps along the ground, curling around rocks and the reaper’s feet. Distant crows take flight from ruins, silhouetted against a dim, overcast sky. Drifting embers and ash particles catch faint light, illuminated by ghostly sources. Strong BOKEH effect with soft, out-of-focus light orbs in foreground and background. Depth of Field keeps the reaper sharp, blurring distant quarry details. Cold, bluish-gray palette with muted greens, blacks, and hints of indigo, contrasted by glowing runes and faint violet accents. Low light casts long, dramatic shadows, with flickers of distant lightning revealing new ruins before plunging back into darkness. Reaper shifts in a predatory stance, scythe arcing slowly, leaving a trail of glowing embers or shadowy mist. Cloak ripples in spectral breeze, tatters fluttering in slow motion. Head tilts subtly, gaze unwavering. Scythe scrapes quarry ground, sparking faintly. Runes crackle with energy, pulsing in sync with movements. Camera orbits slowly, starting frontal to capture eyes, gliding to three-quarter view for scythe and cloak, pulling back to reveal quarry, then zooming for a close-up of the reaper’s face. Smooth 24 FPS, deliberate pacing, hypnotic and dreamlike. Drifting ash and spectral embers swirl faster with scythe swings, dispersing with cloak’s billow. Eerie, dark atmosphere with thick fog, ghostly whispers, and distant clattering echoes.
 
 ## Features
 
