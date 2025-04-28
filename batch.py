@@ -235,6 +235,7 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
         H, W, C = input_image.shape
         height, width = find_nearest_bucket(H, W, resolution=640)
         input_image_np = resize_and_center_crop(input_image, target_width=width, target_height=height)
+        input_image_np = adjust_image_dimensions(input_image_np)
 
         # Save resized reference image
         os.makedirs(output_dir, exist_ok=True)
@@ -255,7 +256,16 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
         if not high_vram:
             load_model_as_complete(image_encoder, target_device=gpu)
 
-        image_encoder_output = hf_clip_vision_encode(input_image_np, feature_extractor, image_encoder)
+        try:
+            image_encoder_output = hf_clip_vision_encode(input_image_np, feature_extractor, image_encoder)
+        except RuntimeError as e:
+            if "The size of tensor a" in str(e):
+                print(f"Warning: Tensor size mismatch for {image_path}. Adjusting image dimensions and retrying.")
+                input_image_np = adjust_image_dimensions(input_image_np)
+                image_encoder_output = hf_clip_vision_encode(input_image_np, feature_extractor, image_encoder)
+            else:
+                raise
+
         image_encoder_last_hidden_state = image_encoder_output.last_hidden_state
 
         # Convert tensors to appropriate dtype
@@ -442,6 +452,17 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
                 text_encoder, text_encoder_2, image_encoder, vae, transformer
             )
         return None
+
+# Ensure the image dimensions are compatible with the model by padding or cropping to the nearest multiple of 16.
+def adjust_image_dimensions(image_np):
+    height, width, _ = image_np.shape
+    new_height = (height + 15) // 16 * 16
+    new_width = (width + 15) // 16 * 16
+
+    padded_image = np.zeros((new_height, new_width, 3), dtype=image_np.dtype)
+    padded_image[:height, :width, :] = image_np
+
+    return padded_image
 
 def main():
     args = parse_args()
