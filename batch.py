@@ -40,7 +40,8 @@ fallback_prompt    = ""                 # Fallback prompt if no other prompt sou
 
 # Other settings
 input_dir          = 'input'            # Directory containing input images
-output_dir         = 'output'           # Directory to save output videos
+output_dir         = 'output'           # Directory for final output videos
+temp_dir           = 'temp'             # Directory for temporary processing files
 seed               = -1                 # Random seed; -1 means random each run
 use_teacache       = True               # Use TeaCache for faster processing (may affect hand quality)
 video_length       = 5                  # Video length in seconds (range: 1-120)
@@ -50,6 +51,7 @@ gpu_memory         = 6.0                # GPU memory to preserve (GB)
 overwrite          = False              # Overwrite existing output files if True
 fix_encoding       = True               # Re-encode video for web compatibility
 copy_to_input      = True               # Copy final video to input folder
+clear_temp_dir     = True               # Clean up temporary files after successful completion
 
 def get_image_files(directory):
     """Get all image files from directory"""
@@ -151,8 +153,10 @@ def parse_args():
     
     parser.add_argument("--input_dir", type=str, default=input_dir, 
                         help=f"Directory containing input images (default: {input_dir})")
+    parser.add_argument("--temp_dir", type=str, default=temp_dir, 
+                        help=f"Directory for temporary processing files (default: {temp_dir})")
     parser.add_argument("--output_dir", type=str, default=output_dir, 
-                        help=f"Directory to save output videos (default: {output_dir})")
+                        help=f"Directory for final output videos (default: {output_dir})")
     parser.add_argument("--prompt", type=str, default=fallback_prompt,
                         help=f"Prompt to guide the generation (fallback: '{fallback_prompt}')")
     parser.add_argument("--seed", type=int, default=seed,
@@ -177,22 +181,26 @@ def parse_args():
                         help=f"Use prompt list file (default: {use_prompt_list_file})")
     parser.add_argument("--prompt_list_file", type=str, default=prompt_list_file,
                         help=f"Path to prompt list file (default: '{prompt_list_file}')")
-    parser.add_argument("--copy_to_input", action="store_true", default=copy_to_input,
-                        help=f"Copy final video to input folder (default: {copy_to_input})")
+    parser.add_argument("--clear_temp_dir", action="store_true", default=clear_temp_dir,
+                        help=f"Clean up temporary files after successful completion (default: {clear_temp_dir})")
     
     return parser.parse_args()
 
 @torch.no_grad()
-def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1, 
+def process_single_image(image_path, temp_dir, output_dir, prompt="", n_prompt="", seed=-1, 
                          video_length=5.0, steps=25, gs=10.0, gpu_memory=6.0, 
                          use_teacache=True, high_vram=False, 
                          text_encoder=None, text_encoder_2=None, tokenizer=None, tokenizer_2=None,
                          vae=None, feature_extractor=None, image_encoder=None, transformer=None,
-                         fix_encoding=True, copy_to_input=True):
+                         fix_encoding=True):
     """Process a single image to generate a video"""
     
     job_id = generate_timestamp()
     filename = Path(image_path).stem
+    
+    # Create directories if they don't exist
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
     
     # Use random seed if seed is -1
     if seed == -1:
@@ -237,8 +245,7 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
         input_image_np = resize_and_center_crop(input_image, target_width=width, target_height=height)
 
         # Save resized reference image
-        os.makedirs(output_dir, exist_ok=True)
-        Image.fromarray(input_image_np).save(os.path.join(output_dir, f'{job_id}.png'))
+        Image.fromarray(input_image_np).save(os.path.join(temp_dir, f'{job_id}.png'))
 
         input_image_pt = torch.from_numpy(input_image_np).float() / 127.5 - 1
         input_image_pt = input_image_pt.permute(2, 0, 1)[None, :, None]
@@ -367,7 +374,7 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
             if not high_vram:
                 unload_complete_models()
 
-            temp_output_filename = os.path.join(output_dir, f'{job_id}_{total_generated_latent_frames}.mp4')
+            temp_output_filename = os.path.join(temp_dir, f'{job_id}_{total_generated_latent_frames}.mp4')
             save_bcthw_as_mp4(history_pixels, temp_output_filename, fps=30)
 
             print(f'Decoded. Current latent shape {real_history_latents.shape}; pixel shape {history_pixels.shape}')
@@ -376,60 +383,28 @@ def process_single_image(image_path, output_dir, prompt="", n_prompt="", seed=-1
                 break
 
         # Create final output with original filename
+        temp_final_filename = os.path.join(temp_dir, f'{filename}.mp4')
         final_output_filename = os.path.join(output_dir, f'{filename}.mp4')
         
-        # Copy the last temp file to the final output filename
-        shutil.copy2(temp_output_filename, final_output_filename)
+        # Copy the last temp file to the temp final filename
+        shutil.copy2(temp_output_filename, temp_final_filename)
         
-        # Handle encoding fix and copying to input folder
-        input_dir = str(Path(image_path).parent)
-        input_output_filename = os.path.join(input_dir, f'{filename}.mp4')
-        
-        if copy_to_input:
-            try:
-                # Check if file exists and is locked
-                if os.path.exists(input_output_filename):
-                    try:
-                        with open(input_output_filename, 'a'):
-                            pass
-                    except:
-                        print(f"Warning: Output file {input_output_filename} is locked or in use. Skipping copy to input folder.")
-                        return final_output_filename
-                
-                # Fix encoding if enabled
-                if fix_encoding:
-                    fixed_output = fix_video_encoding(final_output_filename)
-                    if fixed_output:
-                        # Use the fixed video for copying
-                        shutil.copy2(fixed_output, input_output_filename)
-                        print(f"✅ Successfully processed and fixed {image_path} -> {input_output_filename}")
-                        # Remove the fixed temporary file
-                        os.remove(fixed_output)
-                    else:
-                        print(f"Warning: Encoding fix failed. Copying original video to {input_output_filename}")
-                        shutil.copy2(final_output_filename, input_output_filename)
-                        print(f"✅ Successfully processed {image_path} -> {input_output_filename}")
-                else:
-                    shutil.copy2(final_output_filename, input_output_filename)
-                    print(f"✅ Successfully processed {image_path} -> {input_output_filename}")
-                    
-            except PermissionError:
-                print(f"Warning: Could not copy to {input_output_filename} due to permission error. Output is still available at {final_output_filename}")
-            except Exception as e:
-                print(f"Warning: Could not copy to input folder: {e}. Output is still available at {final_output_filename}")
-            
-        else:
-            if fix_encoding:
-                fixed_output = fix_video_encoding(final_output_filename)
-                if fixed_output:
-                    # Replace the original output with the fixed version
-                    shutil.move(fixed_output, final_output_filename)
-                    print(f"✅ Successfully processed and fixed {image_path} -> {final_output_filename}")
-                else:
-                    print(f"Warning: Encoding fix failed. Keeping original video at {final_output_filename}")
-                    print(f"✅ Successfully processed {image_path} -> {final_output_filename}")
+        # Handle encoding fix and final output
+        if fix_encoding:
+            fixed_output = fix_video_encoding(temp_final_filename)
+            if fixed_output:
+                # Move the fixed video to output directory
+                shutil.move(fixed_output, final_output_filename)
+                print(f"✅ Successfully processed and fixed {image_path} -> {final_output_filename}")
             else:
+                # If fixing failed, copy original to output
+                print(f"Warning: Encoding fix failed. Using original video.")
+                shutil.copy2(temp_final_filename, final_output_filename)
                 print(f"✅ Successfully processed {image_path} -> {final_output_filename}")
+        else:
+            # Copy directly to output without fixing
+            shutil.copy2(temp_final_filename, final_output_filename)
+            print(f"✅ Successfully processed {image_path} -> {final_output_filename}")
                 
         return final_output_filename
         
@@ -453,8 +428,13 @@ def main():
         print(f"Please add images to {args.input_dir} and run again.")
         return
     
-    # Create output directory if it doesn't exist
+    # Create directories if they don't exist
+    os.makedirs(args.temp_dir, exist_ok=True)
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Track temporary files created during this run
+    temp_files_created = set()
+    initial_temp_files = set(Path(args.temp_dir).glob('*'))
     
     # Get all image files from input directory
     image_files = get_image_files(args.input_dir)
@@ -473,7 +453,7 @@ def main():
         
         for img_path in image_files:
             # Check if output MP4 already exists
-            output_mp4 = os.path.join(args.input_dir, f"{img_path.stem}.mp4")
+            output_mp4 = os.path.join(args.output_dir, f"{img_path.stem}.mp4")
             if os.path.exists(output_mp4):
                 skipped_files.append(img_path)
             else:
@@ -494,8 +474,9 @@ def main():
     # Print batch processing settings
     print("\nBatch Processing Settings:")
     print(f"  Input Directory: {args.input_dir}")
+    print(f"  Temp Directory: {args.temp_dir}")
     print(f"  Output Directory: {args.output_dir}")
-    # Determine prompt source for settings printout (accurate to per-image .txt, prompt list, image metadata, or fallback)
+    # Determine prompt source for settings printout
     prompt_desc = None
     per_image_txt_exists = all(os.path.exists(str(img.with_suffix('.txt'))) for img in image_files)
     if per_image_txt_exists and len(image_files) > 0:
@@ -517,7 +498,7 @@ def main():
     print(f"  GPU Memory: {args.gpu_memory} GB")
     print(f"  Overwrite Existing: {args.overwrite}")
     print(f"  Fix Encoding: {args.fix_encoding}")
-    print(f"  Copy to Input: {args.copy_to_input}")
+    print(f"  Clear Temp Files: {args.clear_temp_dir}")
 
     print(f"\nProcessing {len(image_files)} images...")
     
@@ -593,73 +574,99 @@ def main():
             prompt_list = [line.strip() for line in f if line.strip()]
         print(f"Loaded {len(prompt_list)} prompts from prompts.txt (project root)")
 
-    # Process each image
-    for i, image_path in enumerate(image_files):
-        print(f"\n[{i+1}/{len(image_files)}] Processing {image_path}")
-        actual_prompt = None
-        prompt_source = None
+    try:
+        # Process each image
+        for i, image_path in enumerate(image_files):
+            print(f"\n[{i+1}/{len(image_files)}] Processing {image_path}")
+            actual_prompt = None
+            prompt_source = None
 
-        # Priority 1: Project-wide prompts.txt
-        if prompt_list is not None:
-            if i < len(prompt_list):
-                actual_prompt = prompt_list[i]
-                prompt_source = f"project prompts.txt line {i+1}"
-            else:
-                actual_prompt = ""
-                prompt_source = "project prompts.txt (no line, using empty prompt)"
-        else:
-            # Priority 2: Per-image .txt file
-            image_txt_path = image_path.with_suffix('.txt')
-            if image_txt_path.exists():
-                with open(image_txt_path, 'r', encoding='utf-8') as f:
-                    actual_prompt = f.read().strip()
-                prompt_source = f"per-image .txt ({image_txt_path.name})"
-            # Priority 3: Image metadata
-            if actual_prompt is None and args.use_image_prompt:
-                image_prompt = get_image_prompt(image_path)
-                if image_prompt:
-                    actual_prompt = image_prompt
-                    prompt_source = "image metadata"
-            # Priority 4: Fallback prompt
-            if actual_prompt is None:
-                actual_prompt = fallback_prompt
-                if fallback_prompt:
-                    prompt_source = "fallback prompt"
+            # Priority 1: Project-wide prompts.txt
+            if prompt_list is not None:
+                if i < len(prompt_list):
+                    actual_prompt = prompt_list[i]
+                    prompt_source = f"project prompts.txt line {i+1}"
                 else:
-                    prompt_source = "empty prompt"
+                    actual_prompt = ""
+                    prompt_source = "project prompts.txt (no line, using empty prompt)"
+            else:
+                # Priority 2: Per-image .txt file
+                image_txt_path = image_path.with_suffix('.txt')
+                if image_txt_path.exists():
+                    with open(image_txt_path, 'r', encoding='utf-8') as f:
+                        actual_prompt = f.read().strip()
+                    prompt_source = f"per-image .txt ({image_txt_path.name})"
+                # Priority 3: Image metadata
+                if actual_prompt is None and args.use_image_prompt:
+                    image_prompt = get_image_prompt(image_path)
+                    if image_prompt:
+                        actual_prompt = image_prompt
+                        prompt_source = "image metadata"
+                # Priority 4: Fallback prompt
+                if actual_prompt is None:
+                    actual_prompt = fallback_prompt
+                    if fallback_prompt:
+                        prompt_source = "fallback prompt"
+                    else:
+                        prompt_source = "empty prompt"
 
-        print(f"Using prompt from: {prompt_source}")
-        if actual_prompt:
-            print(f"Prompt: {actual_prompt[:100]}{'...' if len(actual_prompt) > 100 else ''}")
-        else:
-            print("Prompt: (empty)")
+            print(f"Using prompt from: {prompt_source}")
+            if actual_prompt:
+                print(f"Prompt: {actual_prompt[:100]}{'...' if len(actual_prompt) > 100 else ''}")
+            else:
+                print("Prompt: (empty)")
 
-        # Process the image
-        process_single_image(
-            image_path=image_path,
-            output_dir=args.output_dir,
-            prompt=actual_prompt,
-            n_prompt="",
-            seed=args.seed,
-            video_length=args.video_length,
-            steps=args.steps,
-            gs=args.distilled_cfg,
-            gpu_memory=args.gpu_memory,
-            use_teacache=args.use_teacache,
-            high_vram=high_vram,
-            text_encoder=text_encoder,
-            text_encoder_2=text_encoder_2,
-            tokenizer=tokenizer,
-            tokenizer_2=tokenizer_2,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            image_encoder=image_encoder,
-            transformer=transformer,
-            fix_encoding=args.fix_encoding,
-            copy_to_input=args.copy_to_input
-        )
+            # Process the image
+            process_single_image(
+                image_path=image_path,
+                temp_dir=args.temp_dir,
+                output_dir=args.output_dir,
+                prompt=actual_prompt,
+                n_prompt="",
+                seed=args.seed,
+                video_length=args.video_length,
+                steps=args.steps,
+                gs=args.distilled_cfg,
+                gpu_memory=args.gpu_memory,
+                use_teacache=args.use_teacache,
+                high_vram=high_vram,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=vae,
+                feature_extractor=feature_extractor,
+                image_encoder=image_encoder,
+                transformer=transformer,
+                fix_encoding=args.fix_encoding
+            )
+            
+            # Track new temporary files created during this iteration
+            current_temp_files = set(Path(args.temp_dir).glob('*'))
+            new_temp_files = current_temp_files - initial_temp_files
+            temp_files_created.update(new_temp_files)
 
-    print("\nAll images processed!")
+        print("\nAll images processed!")
+
+        # Clean up temporary files if enabled and processing completed successfully
+        if args.clear_temp_dir and temp_files_created:
+            print("\nCleaning up temporary files...")
+            for temp_file in temp_files_created:
+                try:
+                    if temp_file.is_file():
+                        temp_file.unlink()
+                    elif temp_file.is_dir():
+                        shutil.rmtree(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not remove temporary file {temp_file}: {e}")
+            print("Temporary files cleaned up successfully!")
+            
+    except KeyboardInterrupt:
+        print("\nProcessing interrupted by user. Temporary files will not be cleaned up.")
+    except Exception as e:
+        print(f"\nError during processing: {e}")
+        traceback.print_exc()
+        print("Temporary files will not be cleaned up due to error.")
 
 if __name__ == "__main__":
     main()
