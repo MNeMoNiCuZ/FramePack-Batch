@@ -21,7 +21,6 @@ Prompt:
 - Extract prompts from image metadata (optional)
 - Works in both high and low VRAM environments
 - Skip files that already have generated videos
-- Final videos will be copied to the input folder, matching the same name as the input image
 
 ## Requirements
 
@@ -66,6 +65,7 @@ The script will create:
 ```
 --input_dir PATH      Directory containing input images (default: ./input)
 --output_dir PATH     Directory to save output videos (default: ./outputs)
+--temp_dir PATH       Directory for temporary processing files (default: ./temp)
 --prompt TEXT         Prompt to guide the generation (default: "")
 --seed NUMBER         Random seed, -1 for random (default: -1)
 --use_teacache        Use TeaCache - faster but may affect hand quality (default: True)
@@ -75,6 +75,7 @@ The script will create:
 --gpu_memory FLOAT    GPU memory preservation in GB, range 6-128 (default: 6.0)
 --use_image_prompt    Use prompt from image metadata if available (default: True)
 --overwrite           Overwrite existing output videos (default: False)
+--clear_temp_dir      Clean up temporary files after successful completion (default: True)
 ```
 
 ## Examples
